@@ -1,0 +1,271 @@
+[
+  {
+    "id": "cand_1",
+    "name": "Priya Menon",
+    "final_score": 93.6,
+    "semantic_score": 94.0,
+    "keyword_score": 92.9,
+    "skills": [
+      "javascript",
+      "react",
+      "node.js",
+      "express",
+      "rest apis",
+      "mongodb",
+      "postgresql",
+      "git",
+      "typescript",
+      "docker",
+      "aws",
+      "jest",
+      "agile"
+    ]
+  },
+  {
+    "id": "cand_2",
+    "name": "Divya Krishnan",
+    "final_score": 80.6,
+    "semantic_score": 86.7,
+    "keyword_score": 71.4,
+    "skills": [
+      "javascript",
+      "react",
+      "node.js",
+      "express",
+      "rest apis",
+      "mongodb",
+      "git",
+      "aws",
+      "jest",
+      "agile"
+    ]
+  },
+  {
+    "id": "cand_3",
+    "name": "Aditi Sharma",
+    "final_score": 78.0,
+    "semantic_score": 87.2,
+    "keyword_score": 64.3,
+    "skills": [
+      "javascript",
+      "react",
+      "node.js",
+      "express",
+      "rest apis",
+      "mongodb",
+      "git",
+      "aws",
+      "jest"
+    ]
+  },
+  {
+    "id": "cand_4",
+    "name": "Nikhil Rao",
+    "final_score": 64.1,
+    "semantic_score": 63.9,
+    "keyword_score": 64.3,
+    "skills": [
+      "javascript",
+      "react",
+      "node.js",
+      "express",
+      "rest apis",
+      "mongodb",
+      "sql",
+      "git",
+      "typescript"
+    ]
+  },
+  {
+    "id": "cand_5",
+    "name": "Rohan Verma",
+    "final_score": 63.5,
+    "semantic_score": 58.3,
+    "keyword_score": 71.4,
+    "skills": [
+      "javascript",
+      "react",
+      "node.js",
+      "express",
+      "rest apis",
+      "mongodb",
+      "postgresql",
+      "git",
+      "typescript",
+      "docker"
+    ]
+  },
+  {
+    "id": "cand_6",
+    "name": "Farhan Sheikh",
+    "final_score": 59.9,
+    "semantic_score": 52.3,
+    "keyword_score": 71.4,
+    "skills": [
+      "javascript",
+      "react",
+      "node.js",
+      "express",
+      "rest apis",
+      "mongodb",
+      "postgresql",
+      "git",
+      "docker",
+      "jest"
+    ]
+  },
+  {
+    "id": "cand_7",
+    "name": "Meera Pillai",
+    "final_score": 55.5,
+    "semantic_score": 54.5,
+    "keyword_score": 57.1,
+    "skills": [
+      "javascript",
+      "react",
+      "node.js",
+      "express",
+      "rest apis",
+      "mongodb",
+      "postgresql",
+      "git"
+    ]
+  },
+  {
+    "id": "cand_8",
+    "name": "Sanjay Patil",
+    "final_score": 49.5,
+    "semantic_score": 53.9,
+    "keyword_score": 42.9,
+    "skills": [
+      "javascript",
+      "react",
+      "rest apis",
+      "postgresql",
+      "sql",
+      "git"
+    ]
+  },
+  {
+    "id": "cand_9",
+    "name": "Pooja Shetty",
+    "final_score": 48.2,
+    "semantic_score": 47.0,
+    "keyword_score": 50.0,
+    "skills": [
+      "javascript",
+      "react",
+      "node.js",
+      "rest apis",
+      "mongodb",
+      "sql",
+      "git"
+    ]
+  },
+  {
+    "id": "cand_10",
+    "name": "Ananya Das",
+    "final_score": 48.1,
+    "semantic_score": 46.9,
+    "keyword_score": 50.0,
+    "skills": [
+      "javascript",
+      "react",
+      "node.js",
+      "rest apis",
+      "postgresql",
+      "sql",
+      "git"
+    ]
+  },
+  {
+    "id": "cand_11",
+    "name": "Karthik Iyer",
+    "final_score": 40.9,
+    "semantic_score": 44.4,
+    "keyword_score": 35.7,
+    "skills": [
+      "javascript",
+      "react",
+      "rest apis",
+      "sql",
+      "git"
+    ]
+  },
+  {
+    "id": "cand_12",
+    "name": "Arjun Kumar",
+    "final_score": 35.6,
+    "semantic_score": 35.5,
+    "keyword_score": 35.7,
+    "skills": [
+      "javascript",
+      "node.js",
+      "rest apis",
+      "sql",
+      "git"
+    ]
+  },
+  {
+    "id": "cand_13",
+    "name": "Sneha Reddy",
+    "final_score": 29.7,
+    "semantic_score": 30.5,
+    "keyword_score": 28.6,
+    "skills": [
+      "javascript",
+      "react",
+      "rest apis",
+      "git"
+    ]
+  },
+  {
+    "id": "cand_14",
+    "name": "Vikram Nair",
+    "final_score": 23.6,
+    "semantic_score": 25.1,
+    "keyword_score": 21.4,
+    "skills": [
+      "javascript",
+      "sql",
+      "git"
+    ]
+  },
+  {
+    "id": "cand_15",
+    "name": "Aakash Jain",
+    "final_score": 19.7,
+    "semantic_score": 23.3,
+    "keyword_score": 14.3,
+    "skills": [
+      "sql",
+      "git"
+    ]
+  },
+  {
+    "id": "cand_16",
+    "name": "Ishita Gupta",
+    "final_score": 14.8,
+    "semantic_score": 20.0,
+    "keyword_score": 7.1,
+    "skills": [
+      "sql"
+    ]
+  },
+  {
+    "id": "cand_17",
+    "name": "Ramya Nagaraj",
+    "final_score": 14.1,
+    "semantic_score": 23.5,
+    "keyword_score": 0.0,
+    "skills": []
+  },
+  {
+    "id": "cand_18",
+    "name": "Mohammed Faizan",
+    "final_score": 13.7,
+    "semantic_score": 22.9,
+    "keyword_score": 0.0,
+    "skills": []
+  }
+]
