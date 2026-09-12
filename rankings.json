@@ -23,9 +23,9 @@
   },
   {
     "id": "cand_2",
-    "name": "Divya Krishnan",
-    "final_score": 80.6,
-    "semantic_score": 86.7,
+    "name": "Aditi Sharma",
+    "final_score": 80.9,
+    "semantic_score": 87.2,
     "keyword_score": 71.4,
     "skills": [
       "javascript",
@@ -42,10 +42,10 @@
   },
   {
     "id": "cand_3",
-    "name": "Aditi Sharma",
-    "final_score": 78.0,
-    "semantic_score": 87.2,
-    "keyword_score": 64.3,
+    "name": "Divya Krishnan",
+    "final_score": 80.6,
+    "semantic_score": 86.7,
+    "keyword_score": 71.4,
     "skills": [
       "javascript",
       "react",
@@ -55,7 +55,8 @@
       "mongodb",
       "git",
       "aws",
-      "jest"
+      "jest",
+      "agile"
     ]
   },
   {

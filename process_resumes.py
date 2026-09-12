@@ -1,6 +1,7 @@
 """
 Resume Processing and Offline Evaluation Pipeline.
 Computes Keyword Fit, Semantic Fit, and composite Final Score for candidate resumes.
+Includes robust normalization for noisy formatting, typos, inconsistent headers, and date formats.
 Outputs rankings.json matching the evaluation schema.
 Operates 100% locally with zero external API dependencies.
 """
@@ -25,59 +26,162 @@ except ImportError:
     pdfplumber = None
 
 
-# Default skill matching patterns and synonyms
+# --- TYPO & ALIAS RESOLVER (15+ Tech Aliases) ---
 SKILL_PATTERNS: Dict[str, List[str]] = {
-    "javascript": ["javascript", "js", "es6", "es6+"],
-    "react": ["react", "react.js", "reactjs"],
-    "node.js": ["node.js", "nodejs", "node"],
-    "express": ["express", "express.js", "expressjs"],
-    "rest apis": ["rest api", "rest apis", "restful api", "restful apis", "rest"],
-    "mongodb": ["mongodb", "mongo"],
-    "postgresql": ["postgresql", "postgres"],
-    "sql": ["sql", "mysql", "nosql", "sqlite"],
-    "git": ["git", "github"],
-    "typescript": ["typescript", "ts"],
-    "docker": ["docker", "containerization"],
-    "aws": ["aws", "ec2", "s3", "cloud"],
-    "jest": ["jest", "mocha", "testing"],
-    "agile": ["agile", "scrum"],
+    "javascript": ["javascript", "js", "es6", "es6+", "ecmascript", "java script"],
+    "react": ["react", "react.js", "reactjs", "react js", "react-js"],
+    "node.js": ["node.js", "nodejs", "node js", "node-js", "node"],
+    "express": ["express", "express.js", "expressjs", "express js", "express-js"],
+    "rest apis": ["rest api", "rest apis", "restful api", "restful apis", "restful", "rest"],
+    "mongodb": ["mongodb", "mongo", "mongo db"],
+    "postgresql": ["postgresql", "postgres", "psql", "postgre sql", "postgre"],
+    "sql": ["sql", "mysql", "nosql", "sqlite", "rdbms"],
+    "git": ["git", "github", "gitlab", "version control"],
+    "typescript": ["typescript", "ts", "type script"],
+    "docker": ["docker", "docker container", "containerization", "containers"],
+    "aws": ["aws", "amazon web services", "ec2", "s3", "lambda", "cloud"],
+    "jest": ["jest", "jest.js", "mocha", "chai", "unit testing"],
+    "agile": ["agile", "scrum", "kanban", "sprint"],
+    "python": ["python", "python3", "py"],
 }
+
+# --- HEADER CANONICALIZATION PATTERNS ---
+HEADER_PATTERNS = [
+    (
+        r"(?i)^[ \t]*(?:tech(?:nical)?\s*skills?|core\s*competencies|tools\s*&\s*technologies|skillsets?|technical\s*competencies|key\s*skills?|skills)[ \t]*:?$",
+        "SKILLS",
+    ),
+    (
+        r"(?i)^[ \t]*(?:work\s*history|professional\s*experience|employment\s*history|work\s*experience|employment|experience)[ \t]*:?$",
+        "EXPERIENCE",
+    ),
+    (
+        r"(?i)^[ \t]*(?:academics?|education\s*background|educational\s*qualifications?|qualifications?|academic\s*background|education)[ \t]*:?$",
+        "EDUCATION",
+    ),
+    (
+        r"(?i)^[ \t]*(?:personal\s*projects?|key\s*projects?|academic\s*projects?|technical\s*projects?|projects?)[ \t]*:?$",
+        "PROJECTS",
+    ),
+    (
+        r"(?i)^[ \t]*(?:professional\s*summary|career\s*objective|executive\s*summary|profile|summary)[ \t]*:?$",
+        "SUMMARY",
+    ),
+]
+
+# --- HETEROGENEOUS DATE SCANNER REGEX ---
+DATE_REGEX = re.compile(
+    r"\b(?:"
+    r"(?:(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|\d{1,2})[\s/,\.\-]+)?\d{4}"
+    r"\s*(?:-|–|—|to|until)\s*"
+    r"(?:(?:(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|\d{1,2})[\s/,\.\-]+)?\d{4}|present|current|ongoing|now)"
+    r")\b",
+    re.IGNORECASE,
+)
+
+
+def clean_raw_text(text: str) -> str:
+    """
+    Noise & Encoding Cleaner: Strips non-ASCII bullet characters (•, ▪, \x7f),
+    control characters, excess whitespaces, and broken multi-line breaks.
+    """
+    if not text:
+        return ""
+
+    # Replace unicode dashes with standard hyphens
+    text = re.sub(r"[—–−]", "-", text)
+
+    # Replace unicode quotes
+    text = re.sub(r'[""„‟]', '"', text)
+    text = re.sub(r"[''‛’`]", "'", text)
+
+    # Strip bullets & non-printable / control characters (keep \n and \t)
+    text = re.sub(r"[•▪●★◆▲▶►✓✔\x7f\uf0b7\u2022\u25cf\u25aa\u25ab]", " ", text)
+    text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", text)
+
+    # Normalize excessive spaces and tabs
+    text = re.sub(r"[ \t]+", " ", text)
+
+    # Normalize broken multi-line breaks (more than 2 consecutive newlines -> 2)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+
+    return text.strip()
+
+
+def normalize_section_headers(text: str) -> str:
+    """
+    Header Normalization: Maps noisy, varied section headers (e.g. Core Competencies,
+    Technical Skills, Work History, Academics) to canonical uppercase headers.
+    """
+    lines = text.split("\n")
+    normalized_lines = []
+    for line in lines:
+        stripped = line.strip()
+        matched = False
+        for pattern, canonical in HEADER_PATTERNS:
+            if re.match(pattern, stripped):
+                normalized_lines.append(canonical)
+                matched = True
+                break
+        if not matched:
+            normalized_lines.append(line)
+    return "\n".join(normalized_lines)
+
+
+def scan_date_ranges(text: str) -> List[str]:
+    """
+    Date Format Resiliency: Detects heterogeneous date ranges (e.g. '01/2022 - Present',
+    'Jan 2021 to Dec 2023', '2020-2024') gracefully without throwing format exceptions.
+    """
+    try:
+        matches = DATE_REGEX.findall(text)
+        return [m.strip() for m in matches if m.strip()]
+    except Exception:
+        return []
 
 
 def extract_text_from_file(file_path: str) -> str:
-    """Extract raw text from PDF or text file."""
+    """Extract raw text from PDF or text file with fallback handlers."""
     ext = os.path.splitext(file_path)[1].lower()
+    raw_content = ""
 
     if ext == ".pdf":
         if pypdf is not None:
             try:
                 reader = pypdf.PdfReader(file_path)
                 pages_text = [p.extract_text() or "" for p in reader.pages]
-                return "\n".join(pages_text).strip()
+                raw_content = "\n".join(pages_text).strip()
             except Exception as e:
                 print(f"[Warning] pypdf failed on {file_path}: {e}")
 
-        if pdfplumber is not None:
+        if not raw_content and pdfplumber is not None:
             try:
                 with pdfplumber.open(file_path) as pdf:
                     pages_text = [p.extract_text() or "" for p in pdf.pages]
-                    return "\n".join(pages_text).strip()
+                    raw_content = "\n".join(pages_text).strip()
             except Exception as e:
                 print(f"[Warning] pdfplumber failed on {file_path}: {e}")
 
     # Fallback / Plain text file
-    try:
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-            content = f.read()
-            # If the text file happens to be a raw PDF binary
-            if content.startswith("%PDF") and pypdf is not None:
-                reader = pypdf.PdfReader(file_path)
-                pages_text = [p.extract_text() or "" for p in reader.pages]
-                return "\n".join(pages_text).strip()
-            return content.strip()
-    except Exception as e:
-        print(f"[Error] Failed to read {file_path}: {e}")
-        return ""
+    if not raw_content:
+        try:
+            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                content = f.read()
+                # If the text file happens to be a raw PDF binary
+                if content.startswith("%PDF") and pypdf is not None:
+                    reader = pypdf.PdfReader(file_path)
+                    pages_text = [p.extract_text() or "" for p in reader.pages]
+                    raw_content = "\n".join(pages_text).strip()
+                else:
+                    raw_content = content.strip()
+        except Exception as e:
+            print(f"[Error] Failed to read {file_path}: {e}")
+            return ""
+
+    # Apply Normalization Pipeline
+    cleaned = clean_raw_text(raw_content)
+    normalized = normalize_section_headers(cleaned)
+    return normalized
 
 
 def extract_candidate_name(file_path: str, text: str) -> str:
@@ -109,7 +213,7 @@ def extract_candidate_name(file_path: str, text: str) -> str:
 
 
 def match_skills(text: str, jd_skills: List[str]) -> List[str]:
-    """Detect which JD skills are matched in candidate resume."""
+    """Detect which JD skills are matched in candidate resume using alias & typo normalization."""
     text_lower = text.lower()
     matched = []
 
@@ -177,7 +281,7 @@ def process_all_resumes(
     jd_file: str = "jd.json",
     output_file: str = "rankings.json",
 ) -> List[Dict[str, Any]]:
-    """Process all resumes in directory and export rankings.json."""
+    """Process all resumes in directory with graceful normalization and export rankings.json."""
     if not os.path.exists(jd_file):
         raise FileNotFoundError(f"Job description file {jd_file} not found!")
 
@@ -196,7 +300,7 @@ def process_all_resumes(
     if not file_paths:
         raise FileNotFoundError(f"No resume files found in {target_dir}")
 
-    print(f"Found {len(file_paths)} resumes in '{target_dir}'. Processing...")
+    print(f"Found {len(file_paths)} resumes in '{target_dir}'. Applying Normalization Engine...")
 
     resumes_data = []
     resume_texts = []
@@ -204,6 +308,7 @@ def process_all_resumes(
     for file_path in file_paths:
         text = extract_text_from_file(file_path)
         name = extract_candidate_name(file_path, text)
+        dates_found = scan_date_ranges(text)
         matched = match_skills(text, jd_skills)
         kw_fit = compute_keyword_fit(matched, jd_skills)
 
@@ -211,6 +316,7 @@ def process_all_resumes(
             {
                 "file_path": file_path,
                 "name": name,
+                "dates_detected": len(dates_found),
                 "matched_skills": matched,
                 "keyword_score": kw_fit,
             }
@@ -257,7 +363,7 @@ def process_all_resumes(
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(rankings_output, f, indent=2)
 
-    print(f"Successfully exported {len(rankings_output)} candidates to '{output_file}'.")
+    print(f"Successfully normalized and exported {len(rankings_output)} candidates to '{output_file}'.")
     return rankings_output
 
 

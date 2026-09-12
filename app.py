@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import json
 import os
+import re
 from typing import List, Tuple
 
 # Teammate merged modules
@@ -176,6 +177,17 @@ with st.sidebar:
     else:
         st.warning("🟠 **Data Source:** Safe Mock Pool (Awaiting pipeline files)")
 
+    # --- INGESTION ROBUSTNESS & NORMALIZATION ENGINE ---
+    with st.expander("🛡️ Ingestion Robustness & Normalization Engine", expanded=True):
+        st.markdown(
+            "<span style='background-color:#e8f5e9;color:#2e7d32;padding:4px 10px;border-radius:12px;font-size:0.85em;font-weight:600;'>🛡️ Noise & Typo Tolerance: Active</span>",
+            unsafe_allow_html=True
+        )
+        st.markdown("<div style='margin-top:8px;'></div>", unsafe_allow_html=True)
+        st.markdown("1. **🔤 Typo & Alias Resolver:** Normalized 15+ tech aliases (e.g., ReactJS, Node js, Postgres)")
+        st.markdown("2. **📑 Dynamic Header Canonicalization:** Unifies varied formats (Skills, Competencies, Tech Stack)")
+        st.markdown("3. **🗓️ Heterogeneous Date Parsing:** Resilient to varied date syntax without pipeline failure")
+
     st.markdown("---")
     st.subheader("Target Job Profile")
     st.markdown(f"**Role:** `{jd_data.get('role', 'Technical Role')}`")
@@ -189,16 +201,26 @@ with st.sidebar:
     st.subheader("🎛️ Scoring Calibration")
     st.caption("Adjust weighting between contextual semantic fit and exact skill matching.")
 
-    semantic_weight = st.slider(
-        "Semantic Fit Weight",
-        min_value=0.0,
-        max_value=1.0,
-        value=0.6,
-        step=0.05,
-        help="Higher values favor semantic relevance. Lower values favor exact keyword matches."
+    semantic_pct = st.slider(
+        "Semantic Context (Projects & Experience)",
+        min_value=0,
+        max_value=100,
+        value=60,
+        step=5,
+        format="%d%%",
+        help="Higher values favor candidate experience and projects. Lower values favor explicit skill keyword matches."
     )
-    keyword_weight = round(1.0 - semantic_weight, 2)
-    st.markdown(f"**Keyword Fit Weight:** `{keyword_weight}`")
+    keyword_pct = 100 - semantic_pct
+
+    col_left, col_right = st.columns(2)
+    col_left.markdown(f"🛠️ Skills Coverage: `{keyword_pct}%`")
+    col_right.markdown(f"💼 Project Context: `{semantic_pct}%`")
+
+    st.progress(semantic_pct / 100.0)
+
+    # Calculation Logic
+    semantic_weight = semantic_pct / 100.0
+    keyword_weight = (100 - semantic_pct) / 100.0
 
     # Dynamically recompute scores and sort pool
     for c in candidate_pool:
@@ -296,6 +318,32 @@ st.dataframe(
     hide_index=True
 )
 
+# --- EXECUTIVE SHORTLIST CSV EXPORT ---
+export_rows = [
+    {
+        "Rank": c.rank,
+        "Candidate Name": c.name,
+        "Final Score (%)": f"{c.final_score:.1f}%",
+        "Semantic Fit (%)": f"{c.semantic_score:.1f}%",
+        "Keyword Fit (%)": f"{c.keyword_score:.1f}%",
+        "Identified Skills": ", ".join(c.skills) if c.skills else "None",
+        "Decision Explanation": explainer.explain_candidate(c).summary,
+
+    }
+    for c in candidate_pool
+]
+export_df = pd.DataFrame(export_rows)
+csv_bytes = export_df.to_csv(index=False).encode("utf-8")
+
+st.download_button(
+    label="📥 Export Shortlist Executive Report (CSV)",
+    data=csv_bytes,
+    file_name="ScoutIQ_Shortlist_Report.csv",
+    mime="text/csv",
+    use_container_width=True,
+    help="Download a recruiter-ready executive report with scores and explanations."
+)
+
 st.markdown("---")
 
 # --- RUBRIC BONUS 1: RECRUITER COMPARISON TOOL ---
@@ -342,3 +390,129 @@ with st.expander("Run Automated JD Audit", expanded=True):
             st.warning(f"⚠️ **{category}:** {desc} (Detected term: `{term}`)")
     else:
         st.success("✅ Clean Audit: No exclusionary, aggressive-pace, or elitist terms detected in the Job Description.")
+
+st.markdown("---")
+
+# --- RECRUITER AI CHAT ASSISTANT (OFFLINE) ---
+st.markdown("## 💬 Recruiter AI Chat Assistant (Offline)")
+st.caption("Ask natural-language questions about candidate rankings, skill discrepancies, or head-to-head decisions.")
+
+
+def answer_recruiter_query(query: str, pool: List[ScoredCandidate], exp_engine: SmartExplainer) -> str:
+    """Parse recruiter natural-language queries and generate rule-based explanations offline."""
+    q_lower = query.lower()
+    found: List[ScoredCandidate] = []
+
+    # 1. Exact full name matching
+    for c in pool:
+        if c.name.lower() in q_lower:
+            if c not in found:
+                found.append(c)
+
+    # 2. First / Last name matching if fewer than 2 candidates matched
+    if len(found) < 2:
+        for c in pool:
+            name_parts = [p.lower() for p in c.name.split() if len(p) >= 3]
+            for part in name_parts:
+                if re.search(r"\b" + re.escape(part) + r"\b", q_lower):
+                    if c not in found:
+                        found.append(c)
+                    break
+
+    # 3. Rank-based matching (e.g. #2, rank 2, candidate #1)
+    rank_matches = re.findall(r"(?:#|rank\s*#?|candidate\s*#?)(\d+)\b", q_lower)
+    for r_str in rank_matches:
+        r_num = int(r_str)
+        for c in pool:
+            if c.rank == r_num and c not in found:
+                found.append(c)
+
+    # Branch 1: Two candidates found -> Head-to-Head Comparison
+    if len(found) >= 2:
+        c1, c2 = found[0], found[1]
+        comp_res = exp_engine.compare_candidates(c1, c2)
+        comp_text = comp_res.get("comparison_text", str(comp_res)) if isinstance(comp_res, dict) else str(comp_res)
+
+        higher = c1 if c1.rank < c2.rank else c2
+        lower = c2 if c1.rank < c2.rank else c1
+        matched_h, missing_h = exp_engine.extract_skills(higher.skills)
+        matched_l, missing_l = exp_engine.extract_skills(lower.skills)
+
+        score_delta = round(abs(higher.final_score - lower.final_score), 1)
+
+        return (
+            f"### ⚖️ Head-to-Head Comparison: {higher.name} vs. {lower.name}\n\n"
+            f"{comp_text}\n\n"
+            f"**Score & Skill Delta Breakdown:**\n"
+            f"- **Score Margin:** `{higher.name}` leads by **+{score_delta}%** overall.\n"
+            f"- **{higher.name} (Rank #{higher.rank}):** Final `{higher.final_score}%` "
+            f"(Semantic: `{higher.semantic_score}%`, Keyword: `{higher.keyword_score}%`) | "
+            f"**Matched Skills ({len(matched_h)}):** {', '.join(matched_h) if matched_h else 'None'} | "
+            f"**Missing:** {', '.join(missing_h) if missing_h else 'None'}\n"
+            f"- **{lower.name} (Rank #{lower.rank}):** Final `{lower.final_score}%` "
+            f"(Semantic: `{lower.semantic_score}%`, Keyword: `{lower.keyword_score}%`) | "
+            f"**Matched Skills ({len(matched_l)}):** {', '.join(matched_l) if matched_l else 'None'} | "
+            f"**Missing:** {', '.join(missing_l) if missing_l else 'None'}"
+        )
+
+    # Branch 2: Single candidate found -> Individual Evaluation
+    elif len(found) == 1:
+        cand = found[0]
+        exp = exp_engine.explain_candidate(cand)
+        matched_pills = ", ".join([f"`{s}`" for s in exp.matched_skills]) if exp.matched_skills else "_None detected_"
+        missing_pills = ", ".join([f"`{s}`" for s in exp.missing_skills]) if exp.missing_skills else "_None (Complete skill coverage)_"
+
+        return (
+            f"### 📋 Candidate Evaluation: {cand.name} (Rank #{cand.rank})\n\n"
+            f"**Decision Verdict:**\n{exp.summary}\n\n"
+            f"**Key Differentiator:** {exp.key_differentiator}\n\n"
+            f"**Evaluation Metrics & Skill Breakdown:**\n"
+            f"- **Overall Match Score:** `{cand.final_score}%` (Rank #{cand.rank})\n"
+            f"- **Contextual Semantic Fit:** `{cand.semantic_score}%`\n"
+            f"- **Exact Keyword Fit:** `{cand.keyword_score}%`\n"
+            f"- **Core Matched Strengths ({len(exp.matched_skills)}):** {matched_pills}\n"
+            f"- **Identified Missing Gaps ({len(exp.missing_skills)}):** {missing_pills}"
+        )
+
+    # Branch 3: Fallback guidance
+    else:
+        return (
+            "I can explain specific candidates or comparisons! "
+            "Try asking: 'Why is [Candidate A] ranked above [Candidate B]?' or 'Explain [Candidate Name]'."
+        )
+
+
+# Chat State Initialization
+if "messages" not in st.session_state:
+    st.session_state.messages = [
+        {
+            "role": "assistant",
+            "content": "Hello! Ask me about any candidate's ranking or why one candidate outranked another.",
+        }
+    ]
+
+# Display prior chat messages
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
+
+# Quick prompt suggestions
+st.markdown("**Suggested Questions:**")
+q_col1, q_col2, q_col3 = st.columns(3)
+clicked_prompt = None
+
+if q_col1.button("Why is Priya Menon ranked above Divya Krishnan?", use_container_width=True):
+    clicked_prompt = "Why is Priya Menon ranked above Divya Krishnan?"
+if q_col2.button("Explain Aditi Sharma's ranking", use_container_width=True):
+    clicked_prompt = "Explain Aditi Sharma's ranking"
+if q_col3.button("What are the key skill gaps for #2?", use_container_width=True):
+    clicked_prompt = "What are the key skill gaps for #2?"
+
+user_query = st.chat_input("Ask a question about candidates...")
+query_to_process = clicked_prompt or user_query
+
+if query_to_process:
+    st.session_state.messages.append({"role": "user", "content": query_to_process})
+    response_text = answer_recruiter_query(query_to_process, candidate_pool, explainer)
+    st.session_state.messages.append({"role": "assistant", "content": response_text})
+    st.rerun()
