@@ -184,9 +184,34 @@ with st.sidebar:
     skills_tags = "".join([f"<span class='badge-matched'>{s}</span>" for s in jd_data.get("skills", [])])
     st.markdown(skills_tags, unsafe_allow_html=True)
     
+    # --- RECRUITER DYNAMIC SCORING CALIBRATION SLIDER ---
+    st.markdown("---")
+    st.subheader("🎛️ Scoring Calibration")
+    st.caption("Adjust weighting between contextual semantic fit and exact skill matching.")
+
+    semantic_weight = st.slider(
+        "Semantic Fit Weight",
+        min_value=0.0,
+        max_value=1.0,
+        value=0.6,
+        step=0.05,
+        help="Higher values favor semantic relevance. Lower values favor exact keyword matches."
+    )
+    keyword_weight = round(1.0 - semantic_weight, 2)
+    st.markdown(f"**Keyword Fit Weight:** `{keyword_weight}`")
+
+    # Dynamically recompute scores and sort pool
+    for c in candidate_pool:
+        c.final_score = round((c.semantic_score * semantic_weight) + (c.keyword_score * keyword_weight), 1)
+
+    candidate_pool = sorted(candidate_pool, key=lambda c: c.final_score, reverse=True)
+    for idx, c in enumerate(candidate_pool):
+        c.rank = idx + 1
+
     st.markdown("---")
     if st.button("🔄 Reload Disk Data", use_container_width=True):
         st.rerun()
+
 
 # --- HEADER SECTION ---
 st.title("🎯 ScoutIQ: Smart Shortlisting Engine")
@@ -289,11 +314,17 @@ with col_b:
 if st.button("Run Head-to-Head Comparison", type="primary"):
     cand_a_obj = name_map[cand_a_name]
     cand_b_obj = name_map[cand_b_name]
-    
+
     comp_result = explainer.compare_candidates(cand_a_obj, cand_b_obj)
-    
+
     st.success("**Differential Analysis:**")
-    st.markdown(comp_result.get("comparison_text", "No comparative text generated."))
+    if isinstance(comp_result, dict):
+        comp_text = comp_result.get("comparison_text", "No comparative text generated.")
+    else:
+        comp_text = comp_result
+
+    st.markdown(comp_text)
+
 
 st.markdown("---")
 
