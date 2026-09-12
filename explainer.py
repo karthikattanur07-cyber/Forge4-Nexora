@@ -164,6 +164,9 @@ class SmartExplainer:
             key_differentiator=differentiator,
         )
 
+    # Alias for explain_candidate
+    generate_explanation = explain_candidate
+
     def explain_top_candidates(
         self, candidates: List[ScoredCandidate], top_n: int = 3
     ) -> List[CandidateExplanation]:
